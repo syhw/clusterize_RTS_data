@@ -19,11 +19,11 @@ Requirements
 ============
 
 Python packages:
-*  Rpy2
-*  Numpy
-*  matplotlib
-*  SciPy
-*  scikit-learn
+-  Rpy2
+-  Numpy
+-  matplotlib
+-  SciPy
+-  scikit-learn
 
 
 Goals
