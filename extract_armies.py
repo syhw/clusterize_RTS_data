@@ -1,15 +1,8 @@
-import sys, os, pickle
+import sys, os, pickle, copy, itertools
 try:
     import numpy as np
 except:
     print "you need numpy"
-    sys.exit(-1)
-try:
-    from rpy2.robjects import r
-    import rpy2.robjects.numpy2ri
-    rpy2.robjects.numpy2ri.activate()
-except:
-    print "you need rpy2"
     sys.exit(-1)
 
 ut = {'T' : set(), 'P' : set(), 'Z' : set()}
@@ -96,33 +89,33 @@ def extract_from(f):
                 min15 = True
                 dump(armies_players, '15')
 
-def clusterize(fscaled1, fscaled2, fscaled3):
-    from sklearn import mixture
-    dpgmm1 = mixture.DPGMM(n_components = 15, cvtype='full')
-    dpgmm1.fit(fscaled1)
-    print dpgmm1
-    raw_input()
-    dpgmm2 = mixture.DPGMM(n_components = 15, cvtype='full')
-    dpgmm2.fit(fscaled2)
-    print dpgmm2
-    raw_input()
-    dpgmm3 = mixture.DPGMM(n_components = 15, cvtype='full')
-    dpgmm3.fit(fscaled3)
-    print dpgmm3
+def clusterize_dirichlet(*args):
+    """ Clustering and plotting with Dirichlet process GMM """
+    ### Clustering
+    try:
+        from sklearn import mixture
+        from scipy import linalg
+        import pylab as pl
+        import matplotlib as mpl
+        from sklearn.decomposition import PCA
+    except:
+        print "You need SciPy and scikit-learn"
+        sys.exit(-1)
 
-    import itertools
+    models = []
+    for arg in args:
+        dpgmm = mixture.DPGMM(n_components = 15, cvtype='full')
+        dpgmm.fit(arg)
+        print dpgmm
+        models.append(copy.deepcopy(dpgmm))
+        print raw_input("any key to pass")
+
+    ### Plotting
     color_iter = itertools.cycle (['r', 'g', 'b', 'c', 'm'])
-
-    from scipy import linalg
-    import pylab as pl
-    import matplotlib as mpl
-    from sklearn.decomposition import PCA
-    for i, (clf, title, data) in enumerate([(dpgmm1, '5min', fscaled1),
-                                      (dpgmm2, '10min', fscaled2),
-                                      (dpgmm3, '15min', fscaled3)]):
+    for i, (clf, data) in enumerate(zip(models, args)):
         pca = PCA(n_components=2)
         X_r = pca.fit(data).transform(data)
-        splot = pl.subplot(3, 1, 1+i)
+        splot = pl.subplot(len(args), 1, 1+i)
         pl.scatter(X_r[:,0], X_r[:,1])
         #pl.title('PCA of unit types / numbers')
         Y_ = clf.predict(data)
@@ -144,25 +137,31 @@ def clusterize(fscaled1, fscaled2, fscaled3):
             ell.set_clip_box(splot.bbox)
             ell.set_alpha(0.5)
             splot.add_artist(ell)
-
         pl.xlim(0.0, 1.0)
         pl.ylim(0.0, 1.0)
         pl.xticks(())
         pl.yticks(())
-        pl.title(title)
-
+        pl.title("Dirichlet process GMM")
     pl.show()
 
-def dump_to_csv(a, fn):
-    f = open(fn, 'w')
-    for line in a:
-        for i, elem in enumerate(line):
-            f.write(str(elem))
-            if i != (len(line) - 1):
-                f.write(',')
-            else:
-                f.write('\n')
-    f.close()
+def clusterize_r_em(*args):
+    """ Clustering and plotting with EM GMM"""
+    try:
+        from rpy2.robjects import r
+        import rpy2.robjects.numpy2ri
+        rpy2.robjects.numpy2ri.activate()
+    except:
+        print "You need rpy2"
+        sys.exit(-1)
+
+    r.library("mclust")
+    for arg in args:
+        model = r.Mclust(arg)
+        print model
+        print r.summary(model)
+        r.quartz("plot")
+        r.plot(model, arg)
+        print raw_input("any key to pass")
 
 #TEST print features_scaling(np.array([[1.0,2.0,3.0,4.0],[5.0,6.0,7.0,8.0],[9.0,10.0,11.0,12.0]]))
 
@@ -172,18 +171,11 @@ if len(sys.argv) > 1:
         fscaled1 = pickle.load(open('fscaled1.blob', 'r'))
         fscaled2 = pickle.load(open('fscaled2.blob', 'r'))
         fscaled3 = pickle.load(open('fscaled3.blob', 'r'))
-        dump_to_csv(fscaled1, 'fscaled1.csv')
-        dump_to_csv(fscaled2, 'fscaled2.csv')
-        dump_to_csv(fscaled3, 'fscaled3.csv')
-#        r.library("mclust")
-#        print fscaled2
-#        model = r.Mclust(fscaled2)
-#        print model
-#        print r.summary(model)
-#        r.quartz("plot")
-#        r.plot(model, fscaled2)
-#        print raw_input("any key to pass")
-        clusterize(fscaled1, fscaled2, fscaled3)
+        fscaled1.tofile('fscaled1.csv', ',')
+        fscaled2.tofile('fscaled2.csv', ',')
+        fscaled3.tofile('fscaled3.csv', ',')
+        clusterize_dirichlet(fscaled1, fscaled2, fscaled3)
+        clusterize_r_em(fscaled1, fscaled2, fscaled3)
     else:
         if sys.argv[1] == '-d':
             import glob
@@ -204,5 +196,6 @@ if len(sys.argv) > 1:
         pickle.dump(fscaled2, open('fscaled2.blob', 'w'))
         fscaled3 = features_scaling(armies_np15['P'])
         pickle.dump(fscaled3, open('fscaled3.blob', 'w'))
-        clusterize(fscaled1, fscaled2, fscaled3)
+        clusterize_dirichlet(fscaled1, fscaled2, fscaled3)
+        clusterize_r_em(fscaled1, fscaled2, fscaled3)
 
